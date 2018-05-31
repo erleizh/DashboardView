@@ -2,308 +2,409 @@ package com.erlei.dashboardview.widget;
 
 import android.content.Context;
 import android.content.res.Resources;
+import android.content.res.TypedArray;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.Path;
 import android.graphics.Rect;
 import android.graphics.RectF;
-import android.support.v4.content.ContextCompat;
-import android.text.TextUtils;
+import android.support.annotation.Nullable;
 import android.util.AttributeSet;
 import android.util.TypedValue;
 import android.view.View;
 
 import com.erlei.dashboardview.R;
 
+@SuppressWarnings("unused")
 public class DashboardView extends View {
 
-    private int mRadius; // 扇形半径
-    private int mStartAngle = 180; // 起始角度
-    private int mSweepAngle = 180; // 绘制角度
-    private int mMin = 0; // 最小值
-    private int mMax = 100; // 最大值
-    private int mSection = 10; // 值域（mMax-mMin）等分份数
-    private int mPortion = 10; // 一个mSection等分份数
-    private String mHeaderText = "℃"; // 表头
-    private int mRealTimeValue = mMin; // 实时读数
-    private boolean isShowValue = true; // 是否显示实时读数
-    private int mStrokeWidth; // 画笔宽度
-    private int mLength1; // 长刻度的相对圆弧的长度
-    private int mLength2; // 刻度读数顶部的相对圆弧的长度
-    private int mPLRadius; // 指针长半径
-    private int mPSRadius; // 指针短半径
+    /**
+     * 内圆盘的半径 radius * mDiscFraction
+     */
+    private float mDiscFraction = 0.7F;
+    /**
+     * 渐变的起始颜色
+     */
+    private int mStartColor = Color.RED;
+    /**
+     * 渐变的结束颜色
+     */
+    private int mEndColor = Color.BLUE;
+    /**
+     * 默认的刻度线颜色
+     */
+    private int mDefaultColor = Color.GRAY;
+    /**
+     * 起始角度
+     */
+    private float mStartAngle = 180;
+    /**
+     * 绘制角度
+     */
+    private float mSweepAngle = 180F;
+    /**
+     * 内圆盘半径
+     */
+    private int mInsideDiscRadius;
+    /**
+     * 长刻度
+     */
+    private Line mLongLine;
+    /**
+     * 短刻度
+     */
+    private Line mShortLine;
+    /**
+     * 值域（mMax-mMin）等分份数
+     */
+    private int mSection = 20;
+    /**
+     * 一个mSection等分份数
+     */
+    private int mPortion = 3;
+    private Paint mInsideDiscPaint;
+    private Paint mTickMarksPaint;
+    private Paint mPointerPaint;
+    private Paint mTextPaint;
 
-    private int mPadding;
-    private float mCenterX, mCenterY; // 圆心坐标
-    private Paint mPaint;
-    private RectF mRectFArc;
-    private Path mPath;
-    private RectF mRectFInnerArc;
+    private RectF mInsideDiscRectF;
+
+    private float mCenterX;
+    private float mCenterY;
+    private Line mPointerLine;
+    private float mProgress = 50;
+    private int mTextColor = Color.WHITE;
+    private float mTextSize = dp2px(60);
     private Rect mRectText;
-    private String[] mTexts;
+    private int mMax = 100;
+    private android.animation.ArgbEvaluator mArgbEvaluator;
+
 
     public DashboardView(Context context) {
         this(context, null);
     }
 
-    public DashboardView(Context context, AttributeSet attrs) {
+    public DashboardView(Context context, @Nullable AttributeSet attrs) {
         this(context, attrs, 0);
     }
 
-    public DashboardView(Context context, AttributeSet attrs, int defStyleAttr) {
+    public DashboardView(Context context, @Nullable AttributeSet attrs, int defStyleAttr) {
         super(context, attrs, defStyleAttr);
-
-        init();
+        init(attrs);
     }
 
-    private void init() {
-        mStrokeWidth = dp2px(1);
-        mLength1 = dp2px(8) + mStrokeWidth;
-        mLength2 = mLength1 + dp2px(2);
-        mPSRadius = dp2px(10);
+    private void init(AttributeSet attrs) {
+        TypedArray typeArray = getContext().obtainStyledAttributes(attrs, R.styleable.DashboardView);
 
-        mPaint = new Paint();
-        mPaint.setAntiAlias(true);
-        mPaint.setStrokeCap(Paint.Cap.ROUND);
+        mDiscFraction = typeArray.getFloat(R.styleable.DashboardView_disc_fraction, 0.7F);
+        mTextSize = typeArray.getDimension(R.styleable.DashboardView_text_size, sp2px(30));
+        mTextColor = typeArray.getColor(R.styleable.DashboardView_text_color, Color.WHITE);
+        mStartColor = typeArray.getColor(R.styleable.DashboardView_start_color, Color.RED);
+        mEndColor = typeArray.getColor(R.styleable.DashboardView_end_color, Color.BLUE);
+        mDefaultColor = typeArray.getColor(R.styleable.DashboardView_default_color, Color.GRAY);
 
-        mRectFArc = new RectF();
-        mPath = new Path();
-        mRectFInnerArc = new RectF();
+        mLongLine = new Line(
+                typeArray.getDimensionPixelSize(R.styleable.DashboardView_long_line_width, dp2px(3)),
+                typeArray.getDimensionPixelSize(R.styleable.DashboardView_long_line_height, dp2px(10)));
+        mShortLine = new Line(
+                typeArray.getDimensionPixelSize(R.styleable.DashboardView_short_line_width, dp2px(3)),
+                typeArray.getDimensionPixelSize(R.styleable.DashboardView_short_line_height, dp2px(5)));
+        mPointerLine = new Line(
+                typeArray.getDimensionPixelSize(R.styleable.DashboardView_pointer_width, dp2px(4)),
+                typeArray.getDimensionPixelSize(R.styleable.DashboardView_pointer_height, dp2px(20)));
+
+        mSection = typeArray.getInteger(R.styleable.DashboardView_section, 20);
+        mPortion = typeArray.getInteger(R.styleable.DashboardView_portion, 3);
+
+
+        typeArray.recycle();
+        mArgbEvaluator = new android.animation.ArgbEvaluator();
+
+        //内圆盘画笔
+        mInsideDiscPaint = initInsideDiscPaint();
+        mInsideDiscRectF = new RectF();
+
+        //刻度画笔
+        mTickMarksPaint = initTickMarksPaint();
+
+        //指针画笔
+        mPointerPaint = initPointerPaint();
+
+        //文字画笔
+        mTextPaint = initTextPaint();
         mRectText = new Rect();
+    }
 
-        mTexts = new String[mSection + 1]; // 需要显示mSection + 1个刻度读数
-        for (int i = 0; i < mTexts.length; i++) {
-            int n = (mMax - mMin) / mSection;
-            mTexts[i] = String.valueOf(mMin + i * n);
-        }
+    /**
+     * 文字画笔
+     */
+    private Paint initTextPaint() {
+        Paint paint = new Paint();
+        paint.setAntiAlias(true);
+        paint.setTextAlign(Paint.Align.CENTER);
+        paint.setColor(mTextColor);
+        paint.setTextSize(mTextSize);
+        return paint;
+    }
+
+    private Paint initPointerPaint() {
+        Paint paint = new Paint();
+        paint.setAntiAlias(true);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        paint.setStyle(Paint.Style.STROKE);
+        paint.setStrokeWidth(mPointerLine.width);
+        return paint;
+    }
+
+    private Paint initTickMarksPaint() {
+        Paint paint = new Paint();
+        paint.setAntiAlias(true);
+        paint.setStrokeCap(Paint.Cap.ROUND);
+        return paint;
     }
 
     @Override
     protected void onMeasure(int widthMeasureSpec, int heightMeasureSpec) {
         super.onMeasure(widthMeasureSpec, heightMeasureSpec);
 
-        mPadding = Math.max(
-                Math.max(getPaddingLeft(), getPaddingTop()),
-                Math.max(getPaddingRight(), getPaddingBottom())
-        );
-        setPadding(mPadding, mPadding, mPadding, mPadding);
-
         int width = resolveSize(dp2px(200), widthMeasureSpec);
-        mRadius = (width - mPadding * 2 - mStrokeWidth * 2) / 2;
+        int radius = (width - (getPaddingLeft() + getPaddingRight())) / 2;
+        mInsideDiscRadius = (int) (radius * mDiscFraction);
+        int height = radius + getPaddingTop() + getPaddingBottom();
+        setMeasuredDimension(width, height);
 
-        mPaint.setTextSize(sp2px(16));
-        if (isShowValue) { // 显示实时读数，View高度增加字体高度3倍
-            mPaint.getTextBounds("0", 0, "0".length(), mRectText);
-        } else {
-            mPaint.getTextBounds("0", 0, 0, mRectText);
-        }
-        // 由半径+指针短半径+实时读数文字高度确定的高度
-        int height1 = mRadius + mStrokeWidth * 2 + mPSRadius + mRectText.height() * 3;
-        // 由起始角度确定的高度
-        float[] point1 = getCoordinatePoint(mRadius, mStartAngle);
-        // 由结束角度确定的高度
-        float[] point2 = getCoordinatePoint(mRadius, mStartAngle + mSweepAngle);
-        // 取最大值
-        int max = (int) Math.max(
-                height1,
-                Math.max(point1[1] + mRadius + mStrokeWidth * 2, point2[1] + mRadius + mStrokeWidth * 2)
-        );
-        setMeasuredDimension(width, max + getPaddingTop() + getPaddingBottom());
+        mCenterX = (getMeasuredWidth() - getPaddingLeft() - getPaddingRight()) / 2f;
+        mCenterY = (getMeasuredHeight() - getPaddingTop() - getPaddingRight());
+        //计算内圆盘的位置
+        int insideDiscSize = mInsideDiscRadius * 2;
+        int left = (width - insideDiscSize) / 2;
+        int top = height - mInsideDiscRadius;
+        mInsideDiscRectF.set(left, top, insideDiscSize + left, insideDiscSize + top);
+    }
 
-        mCenterX = mCenterY = getMeasuredWidth() / 2f;
-        mRectFArc.set(
-                getPaddingLeft() + mStrokeWidth,
-                getPaddingTop() + mStrokeWidth,
-                getMeasuredWidth() - getPaddingRight() - mStrokeWidth,
-                getMeasuredWidth() - getPaddingBottom() - mStrokeWidth
-        );
-
-        mPaint.setTextSize(sp2px(10));
-        mPaint.getTextBounds("0", 0, "0".length(), mRectText);
-        mRectFInnerArc.set(
-                getPaddingLeft() + mLength2 + mRectText.height(),
-                getPaddingTop() + mLength2 + mRectText.height(),
-                getMeasuredWidth() - getPaddingRight() - mLength2 - mRectText.height(),
-                getMeasuredWidth() - getPaddingBottom() - mLength2 - mRectText.height()
-        );
-
-        mPLRadius = mRadius - (mLength2 + mRectText.height() + dp2px(5));
+    /**
+     * 画内圆盘
+     */
+    private void drawInsideDisc(Canvas canvas) {
+        canvas.drawArc(mInsideDiscRectF, 0, -180, true, mInsideDiscPaint);
     }
 
     @Override
     protected void onDraw(Canvas canvas) {
         super.onDraw(canvas);
+        drawPointer(canvas);
+        drawInsideDisc(canvas);
+        drawTickMarks(canvas);
+        drawText(canvas);
+    }
 
-        /**
-         * 画圆弧
-         */
-        mPaint.setStyle(Paint.Style.STROKE);
-        mPaint.setStrokeWidth(mStrokeWidth);
-        mPaint.setColor(ContextCompat.getColor(getContext(), R.color.colorPrimary));
-//        canvas.drawArc(mRectFArc, mStartAngle, mSweepAngle, false, mPaint);
+    /**
+     * 画文字
+     */
+    private void drawText(Canvas canvas) {
+        String value = String.valueOf((int) mProgress);
+        mTextPaint.getTextBounds(value, 0, value.length(), mRectText);
+        canvas.drawText(value, mCenterX, (getMeasuredHeight() - mInsideDiscRadius / 2 + mRectText.height() / 2), mTextPaint);
+    }
 
-        /**
-         * 画长刻度
-         * 画好起始角度的一条刻度后通过canvas绕着原点旋转来画剩下的长刻度
-         */
-        double cos = Math.cos(Math.toRadians(mStartAngle - 180));
-        double sin = Math.sin(Math.toRadians(mStartAngle - 180));
-        float x0 = (float) (mPadding + mStrokeWidth + mRadius * (1 - cos));
-        float y0 = (float) (mPadding + mStrokeWidth + mRadius * (1 - sin));
-        float x1 = (float) (mPadding + mStrokeWidth + mRadius - (mRadius - mLength1) * cos);
-        float y1 = (float) (mPadding + mStrokeWidth + mRadius - (mRadius - mLength1) * sin);
-
+    /**
+     * 画指针
+     */
+    private void drawPointer(Canvas canvas) {
         canvas.save();
-        canvas.drawLine(x0, y0, x1, y1, mPaint);
-        float angle = mSweepAngle * 1f / mSection;
+        float v = mSweepAngle * (mProgress / mMax);
+        float x0 = ((getMeasuredWidth() - mInsideDiscRadius * 2) / 2) - mPointerLine.height;
+        float y0 = getMeasuredHeight();
+        float x1 = ((getMeasuredWidth() - mInsideDiscRadius * 2) / 2);
+        float y1 = getMeasuredHeight();
+        canvas.rotate(v, mCenterX, mCenterY);
+        float fraction = (v / mSweepAngle);
+        int evaluate = (int) mArgbEvaluator.evaluate(fraction, mStartColor, mEndColor);
+        mPointerPaint.setColor(evaluate);
+        canvas.drawLine(x0, y0, x1, y1, mPointerPaint);
+        canvas.restore();
+    }
+
+    /**
+     * 画仪表刻度线
+     */
+    private void drawTickMarks(Canvas canvas) {
+        int width = getMeasuredWidth();
+        int height = getMeasuredHeight() - getPaddingTop() - getPaddingBottom();
+        float v = mSweepAngle * (mProgress / mMax);//指针角度
+        //长刻度
+        mTickMarksPaint.setStyle(Paint.Style.STROKE);
+        mTickMarksPaint.setStrokeWidth(mLongLine.width);
+        mTickMarksPaint.setColor(mLongLine.color);
+        float x0 = mLongLine.width * 2;
+        float x1 = mLongLine.height + x0;
+        canvas.save();
+        canvas.translate(0, -mLongLine.width);
+        mTickMarksPaint.setColor(mStartColor);
+        canvas.drawLine(x0, (float) height, x1, (float) height, mTickMarksPaint);
+        float angle = mSweepAngle / mSection;
         for (int i = 0; i < mSection; i++) {
             canvas.rotate(angle, mCenterX, mCenterY);
-            canvas.drawLine(x0, y0, x1, y1, mPaint);
+            float fraction = (angle * (i + 1) / mSweepAngle);
+            if (angle * (i + 1) > v) {
+                mTickMarksPaint.setColor(mDefaultColor);
+            } else {
+                int evaluate = (int) mArgbEvaluator.evaluate(fraction, mStartColor, mEndColor);
+                mTickMarksPaint.setColor(evaluate);
+            }
+            canvas.drawLine(x0, (float) height, x1, (float) height, mTickMarksPaint);
         }
         canvas.restore();
 
-        /**
-         * 画短刻度
-         * 同样采用canvas的旋转原理
-         */
+
+        //画短刻度
         canvas.save();
-        mPaint.setStrokeWidth(1);
-        float x2 = (float) (mPadding + mStrokeWidth + mRadius - (mRadius - mLength1 / 2f) * cos);
-        float y2 = (float) (mPadding + mStrokeWidth + mRadius - (mRadius - mLength1 / 2f) * sin);
-        canvas.drawLine(x0, y0, x2, y2, mPaint);
-        angle = mSweepAngle * 1f / (mSection * mPortion);
+        canvas.translate(0, -mLongLine.width);
+        mTickMarksPaint.setStrokeWidth(mShortLine.width);
+        mTickMarksPaint.setColor(mShortLine.color);
+        float x2 = mShortLine.height + x0;
+        //canvas.drawLine(x0, y0, x2, y2, mTickMarksPaint);//重合线 ， 不用绘制
+        angle = mSweepAngle / (mSection * mPortion);
         for (int i = 1; i < mSection * mPortion; i++) {
             canvas.rotate(angle, mCenterX, mCenterY);
             if (i % mPortion == 0) { // 避免与长刻度画重合
                 continue;
             }
-            canvas.drawLine(x0, y0, x2, y2, mPaint);
+            float fraction = (angle * (i + 1) / mSweepAngle);
+            if (angle * i > v) {
+                mTickMarksPaint.setColor(mDefaultColor);
+            } else {
+                int evaluate = (int) mArgbEvaluator.evaluate(fraction, mStartColor, mEndColor);
+                mTickMarksPaint.setColor(evaluate);
+            }
+            canvas.drawLine(x0, (float) height, x2, (float) height, mTickMarksPaint);
         }
         canvas.restore();
-
-        /**
-         * 画长刻度读数
-         * 添加一个圆弧path，文字沿着path绘制
-         */
-        mPaint.setTextSize(sp2px(10));
-        mPaint.setTextAlign(Paint.Align.LEFT);
-        mPaint.setStyle(Paint.Style.FILL);
-        for (int i = 0; i < mTexts.length; i++) {
-            mPaint.getTextBounds(mTexts[i], 0, mTexts[i].length(), mRectText);
-            // 粗略把文字的宽度视为圆心角2*θ对应的弧长，利用弧长公式得到θ，下面用于修正角度
-            float θ = (float) (180 * mRectText.width() / 2 /
-                    (Math.PI * (mRadius - mLength2 - mRectText.height())));
-
-            mPath.reset();
-            mPath.addArc(
-                    mRectFInnerArc,
-                    mStartAngle + i * (mSweepAngle / mSection) - θ, // 正起始角度减去θ使文字居中对准长刻度
-                    mSweepAngle
-            );
-            canvas.drawTextOnPath(mTexts[i], mPath, 0, 0, mPaint);
-        }
-
-        /**
-         * 画表头
-         * 没有表头就不画
-         */
-        if (!TextUtils.isEmpty(mHeaderText)) {
-            mPaint.setTextSize(sp2px(14));
-            mPaint.setTextAlign(Paint.Align.CENTER);
-            mPaint.getTextBounds(mHeaderText, 0, mHeaderText.length(), mRectText);
-            canvas.drawText(mHeaderText, mCenterX, mCenterY / 2f + mRectText.height(), mPaint);
-        }
-
-        /**
-         * 画指针
-         */
-        float θ = mStartAngle + mSweepAngle * (mRealTimeValue - mMin) / (mMax - mMin); // 指针与水平线夹角
-        int d = dp2px(5); // 指针由两个等腰三角形构成，d为共底边长的一半
-        mPath.reset();
-        float[] p1 = getCoordinatePoint(d, θ - 90);
-        mPath.moveTo(p1[0], p1[1]);
-        float[] p2 = getCoordinatePoint(mPLRadius, θ);
-        mPath.lineTo(p2[0], p2[1]);
-        float[] p3 = getCoordinatePoint(d, θ + 90);
-        mPath.lineTo(p3[0], p3[1]);
-        float[] p4 = getCoordinatePoint(mPSRadius, θ - 180);
-        mPath.lineTo(p4[0], p4[1]);
-        mPath.close();
-        canvas.drawPath(mPath, mPaint);
-
-        /**
-         * 画指针围绕的镂空圆心
-         */
-        mPaint.setColor(Color.WHITE);
-        canvas.drawCircle(mCenterX, mCenterY, dp2px(2), mPaint);
-
-        /**
-         * 画实时度数值
-         */
-        if (isShowValue) {
-            mPaint.setTextSize(sp2px(16));
-            mPaint.setTextAlign(Paint.Align.CENTER);
-            mPaint.setColor(ContextCompat.getColor(getContext(), R.color.colorPrimary));
-            String value = String.valueOf(mRealTimeValue);
-            mPaint.getTextBounds(value, 0, value.length(), mRectText);
-            canvas.drawText(value, mCenterX, mCenterY + mPSRadius + mRectText.height() * 2, mPaint);
-        }
     }
 
-    private int dp2px(int dp) {
+
+    private Paint initInsideDiscPaint() {
+        Paint paint = new Paint();
+        paint.setAntiAlias(true);
+        paint.setColor(Color.GRAY);
+        paint.setStyle(Paint.Style.FILL);
+        return paint;
+    }
+
+    /**
+     * @param discFraction 设置内圆盘的的半径 , 值为 1.0 - 0.0 , 外圈圆的半径 * discFraction
+     */
+    public void setDiscFraction(float discFraction) {
+        mDiscFraction = discFraction;
+        invalidate();
+    }
+
+    public void setMax(int max) {
+        mMax = max;
+        invalidate();
+    }
+
+    /**
+     * @param defaultColor 设置默认颜色 不设置则为 Color.GRAY
+     */
+    public void setDefaultColor(int defaultColor) {
+        mDefaultColor = defaultColor;
+        invalidate();
+    }
+
+    /**
+     * @param progress 设置进度
+     */
+    public void setProgress(int progress) {
+        mProgress = progress;
+        invalidate();
+    }
+
+    /**
+     * @param textColor 文字颜色
+     */
+    public void setTextColor(int textColor) {
+        mTextColor = textColor;
+        invalidate();
+    }
+
+    /**
+     * @param w 长刻度线宽度
+     * @param h 长刻度线宽度
+     */
+    public void setLongLine(int w, int h) {
+        mShortLine = new Line(w, h);
+        invalidate();
+    }
+
+    /**
+     * @param w 短刻度线宽度
+     * @param h 短刻度线宽度
+     */
+    public void setShortLine(int w, int h) {
+        mShortLine = new Line(w, h);
+        invalidate();
+    }
+
+    /**
+     * @param textSize 文字大小
+     */
+    public void setTextSize(float textSize) {
+        mTextSize = textSize;
+        invalidate();
+    }
+
+    /**
+     * @param startColor 起始颜色
+     */
+    public void setStartColor(int startColor) {
+        mStartColor = startColor;
+        invalidate();
+    }
+
+    /**
+     * @param endColor 结束颜色
+     */
+    public void setEndColor(int endColor) {
+        mEndColor = endColor;
+        invalidate();
+    }
+
+    /**
+     * @param portion 每个大刻度里面分为多少小刻度 默认为 3
+     */
+    public void setPortion(int portion) {
+        mPortion = portion;
+        invalidate();
+    }
+
+    /**
+     * @param section 整个仪表有多少大刻度 默认为 20
+     */
+    public void setSection(int section) {
+        mSection = section;
+        invalidate();
+    }
+
+    private class Line {
+        int height;
+        int width;
+        int color;
+
+        Line(int width, int height) {
+            this.width = width;
+            this.height = height;
+        }
+
+    }
+
+    private static int dp2px(float dp) {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_DIP, dp,
                 Resources.getSystem().getDisplayMetrics());
     }
 
-    private int sp2px(int sp) {
+    private static int sp2px(int sp) {
         return (int) TypedValue.applyDimension(TypedValue.COMPLEX_UNIT_SP, sp,
                 Resources.getSystem().getDisplayMetrics());
-    }
-
-    public float[] getCoordinatePoint(int radius, float angle) {
-        float[] point = new float[2];
-
-        double arcAngle = Math.toRadians(angle); //将角度转换为弧度
-        if (angle < 90) {
-            point[0] = (float) (mCenterX + Math.cos(arcAngle) * radius);
-            point[1] = (float) (mCenterY + Math.sin(arcAngle) * radius);
-        } else if (angle == 90) {
-            point[0] = mCenterX;
-            point[1] = mCenterY + radius;
-        } else if (angle > 90 && angle < 180) {
-            arcAngle = Math.PI * (180 - angle) / 180.0;
-            point[0] = (float) (mCenterX - Math.cos(arcAngle) * radius);
-            point[1] = (float) (mCenterY + Math.sin(arcAngle) * radius);
-        } else if (angle == 180) {
-            point[0] = mCenterX - radius;
-            point[1] = mCenterY;
-        } else if (angle > 180 && angle < 270) {
-            arcAngle = Math.PI * (angle - 180) / 180.0;
-            point[0] = (float) (mCenterX - Math.cos(arcAngle) * radius);
-            point[1] = (float) (mCenterY - Math.sin(arcAngle) * radius);
-        } else if (angle == 270) {
-            point[0] = mCenterX;
-            point[1] = mCenterY - radius;
-        } else {
-            arcAngle = Math.PI * (360 - angle) / 180.0;
-            point[0] = (float) (mCenterX + Math.cos(arcAngle) * radius);
-            point[1] = (float) (mCenterY - Math.sin(arcAngle) * radius);
-        }
-
-        return point;
-    }
-
-    public int getRealTimeValue() {
-        return mRealTimeValue;
-    }
-
-    public void setRealTimeValue(int realTimeValue) {
-        if (mRealTimeValue == realTimeValue || realTimeValue < mMin || realTimeValue > mMax) {
-            return;
-        }
-
-        mRealTimeValue = realTimeValue;
-        postInvalidate();
     }
 }

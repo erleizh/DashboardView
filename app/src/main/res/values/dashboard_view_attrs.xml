@@ -1,11 +1,5 @@
-#### 类似汽车仪表盘
-
-<img src="./device-2018-05-31-164927.png" width="50%">
-
-
-- 属性
-
-```
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
     <declare-styleable name="DashboardView">
         <attr name="text_size" format="dimension" />
         <attr name="text_color" format="color" />
@@ -22,5 +16,4 @@
         <attr name="default_color" format="color" />
         <attr name="disc_fraction" format="float" />
     </declare-styleable>
-
-```
+</resources>

@@ -1,17 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:orientation="vertical"
     tools:context=".MainActivity">
 
-    <com.erlei.dashboardview.widget.DashboardView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
-
-    <com.erlei.dashboardview.widget.DashboardView1
+    <com.erlei.dashboardview.widget.DashboardView xmlns:app="http://schemas.android.com/apk/res-auto"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@color/colorAccent" />
-</LinearLayout>
+        android:layout_gravity="center"
+        app:text_color="@android:color/holo_blue_dark"
+        app:text_size="80sp" />
+</FrameLayout>
